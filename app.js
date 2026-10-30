@@ -24,7 +24,7 @@
   let storageAvailable = true;
   try { state = normalize(JSON.parse(localStorage.getItem(storageKey) || '{}')); } catch { storageAvailable = false; }
   let filter = '전체', search = '', toastTimer, lastFocus, pendingImport;
-  let compareA = '', compareB = '';
+  let compareA = '', compareB = '', homePage = 0;
   const paths = {
     arrow:'<path d="M5 12h14m-5-5 5 5-5 5"/>', back:'<path d="M19 12H5m5-5-5 5 5 5"/>',
     leaf:'<path d="M5 19C1 7 10 2 20 4c1 11-5 18-15 15Z"/><path d="m5 19 10-10m-6 6 6 1"/>',
@@ -53,11 +53,16 @@
     clearTimeout(toastTimer); toastTimer = setTimeout(() => box.classList.remove('show'), 2600);
   }
   function navigate(hash) { if (location.hash === hash) render(); else location.hash = hash; }
+
   function route() {
     const params = new URLSearchParams(location.hash.slice(1));
-    if (params.get('view') === 'notebook') return {view:'notebook'};
+    const integer = (key, fallback, min, max) => {
+      const n = Number(params.get(key));
+      return params.has(key) && Number.isFinite(n) ? Math.max(min, Math.min(max, Math.floor(n))) : fallback;
+    };
+    if (params.get('view') === 'notebook') return {view:'notebook',step:integer('step',1,1,4),fact:params.get('fact')};
     const c = findCase(params.get('case'));
-    return c ? {view:'case',c,tab:['evidence','science','think'].includes(params.get('tab'))? params.get('tab'):'evidence',reading:params.get('read')} : {view:'explore'};
+    return c ? {view:'case',c,tab:['evidence','science','think'].includes(params.get('tab'))?params.get('tab'):'evidence',reading:params.get('read'),page:integer('page',0,0,100)} : {view:'explore'};
   }
   function updateUI() {
     document.getElementById('basket-count').textContent = state.candidates.length;
@@ -77,11 +82,12 @@
     document.getElementById('save-status').textContent = storageAvailable ? '이 기기에 자동 저장' : '자동 저장 불가 · 바구니를 내려받으세요';
   }
   function card(c) {
+    const focus = {toads:['주민의 길 이용','먹이와 이동길'],birds:['사람의 공원 이용','새의 먹이와 쉼터'],litter:['바다의 이용과 관리','생물의 몸과 사는 곳']}[c.id];
     return `<article class="case-card ${c.color}">
       <button class="card-open" data-action="case" data-case="${c.id}" aria-label="${esc(c.short)} 살펴보기">
         <div class="card-photo"><img src="${c.image}" alt="${esc(c.photoAlt)}" loading="lazy"><span class="card-no">${c.no}</span><span class="photo-habitat">${c.category} 생태계</span></div>
         <div class="card-body"><div class="card-location">${icon('pin')}${esc(c.place)}</div><h2>${esc(c.title)}</h2><p class="card-hook">${esc(c.hook)}</p>
-        <div class="card-connections"><p><span>우리 동네</span>${esc(c.projectFocus.region)}</p><p><span>생태계</span>${esc(c.projectFocus.ecosystem)}</p></div></div>
+        <div class="card-connections"><p><span>우리 동네</span>${esc(focus?.[0] || c.projectFocus.region)}</p><p><span>생태계</span>${esc(focus?.[1] || c.projectFocus.ecosystem)}</p></div></div>
       </button>
       <button class="card-bookmark" data-action="candidate" data-case="${c.id}" aria-label="${esc(c.short)} 문제 후보에 담기">${icon('bookmark')}</button>
       <div class="card-bottom"><span class="material-total">${icon('book')}읽기 자료 ${c.facts.length}개</span><button class="card-start" data-action="case" data-case="${c.id}" aria-label="${esc(c.short)} 자료 읽기">자료 읽기 ↗</button></div>
@@ -91,18 +97,25 @@
     const q = search.trim().toLocaleLowerCase();
     return D.cases.filter(c => (filter==='전체'||c.category===filter) && (!q||[c.title,c.short,c.place,c.hook,...c.tags].join(' ').toLocaleLowerCase().includes(q)));
   }
+
   function refreshGrid() {
     const matches = filteredCases();
-    document.getElementById('case-grid').innerHTML = matches.length ? matches.map(card).join('') : `<div class="empty-state no-results">${icon('search')}<h2>해당하는 주제가 없어요</h2><p>다른 낱말로 검색하거나 전체 주제를 살펴보세요.</p><button class="secondary-button" data-action="clear-search">전체 주제 보기</button></div>`;
+    const single = window.matchMedia('(max-width:899px)').matches;
+    homePage = Math.max(0, Math.min(homePage, matches.length-1));
+    const visible = single ? matches.slice(homePage,homePage+1) : matches;
+    document.getElementById('case-grid').innerHTML = matches.length ? visible.map(card).join('') : `<div class="empty-state no-results">${icon('search')}<h2>해당하는 주제가 없어요</h2><p>다른 낱말로 검색하거나 전체 주제를 살펴보세요.</p><button class="secondary-button" data-action="clear-search">전체 주제 보기</button></div>`;
     document.getElementById('result-total').textContent = matches.length;
+    const pager = document.getElementById('home-pager');
+    pager.hidden = !single || matches.length < 2;
+    pager.innerHTML = `<button class="subtle-button" data-action="home-page" data-dir="-1" ${homePage===0?'disabled':''}>${icon('back')}앞 주제</button><span>주제 ${homePage+1} / ${matches.length}</span><button class="subtle-button" data-action="home-page" data-dir="1" ${homePage>=matches.length-1?'disabled':''}>다음 주제${icon('arrow')}</button>`;
     document.querySelectorAll('[data-action="filter"]').forEach(b => { b.classList.toggle('active',b.dataset.filter===filter); b.setAttribute('aria-pressed',String(b.dataset.filter===filter)); });
     updateUI();
   }
   function explore() {
     main.classList.add('home-view');
     main.innerHTML = `<section class="hero" aria-labelledby="explore-title"><div><div class="eyebrow">사회 × 과학 · 함께 살아가는 부산</div><h1 id="explore-title">우리 동네의 문제를,<br><em>사람과 생물의 눈으로.</em></h1><p>세 가지 주제의 자료를 깊이 읽고, 우리 모둠의 제안을 준비해요.</p></div><div class="journey" aria-label="탐구 순서"><div class="journey-step"><b>1</b>자료 읽기</div><span class="journey-arrow" aria-hidden="true">→</span><div class="journey-step"><b>2</b>함께 생각</div><span class="journey-arrow" aria-hidden="true">→</span><div class="journey-step"><b>3</b>문제 고르기</div></div></section>
-      <section aria-label="생태 문제 탐색"><div class="explore-toolbar"><div class="filters" role="group" aria-label="생태계 종류로 찾기">${['전체',...new Set(D.cases.map(c=>c.category))].map(f=>`<button class="filter ${f===filter?'active':''}" data-action="filter" data-filter="${f}" aria-pressed="${f===filter}">${f}</button>`).join('')}</div><span class="result-count">살펴볼 주제 <b id="result-total">${D.cases.length}</b>개 · 읽기 자료 ${D.cases.reduce((n,c)=>n+c.facts.length,0)}개</span><label class="search-field">${icon('search')}<input id="case-search" aria-label="장소나 생물 검색" placeholder="장소나 생물로 찾아요" value="${esc(search)}" maxlength="60" type="search"></label></div><div id="case-grid" class="case-grid" aria-live="polite"></div></section>
-      <aside class="shared-topic-note">${icon('users')}<div><strong>같은 주제를 골라도 괜찮아요.</strong><span>살펴본 근거와 제안할 대상에 따라 모둠마다 다른 방법을 생각할 수 있어요.</span></div></aside>
+      <section aria-label="생태 문제 탐색"><div class="explore-toolbar"><div class="filters" role="group" aria-label="생태계 종류로 찾기">${['전체',...new Set(D.cases.map(c=>c.category))].map(f=>`<button class="filter ${f===filter?'active':''}" data-action="filter" data-filter="${f}" aria-pressed="${f===filter}">${f}</button>`).join('')}</div><span class="result-count">살펴볼 주제 <b id="result-total">${D.cases.length}</b>개 · 읽기 자료 ${D.cases.reduce((n,c)=>n+c.facts.length,0)}개</span><label class="search-field">${icon('search')}<input id="case-search" aria-label="장소나 생물 검색" placeholder="장소나 생물로 찾아요" value="${esc(search)}" maxlength="60" type="search"></label></div><div id="case-grid" class="case-grid" aria-live="polite"></div><nav id="home-pager" class="home-pager" aria-label="주제 앞뒤 이동" hidden></nav></section>
+      <aside class="shared-topic-note">${icon('users')}<div><strong>같은 주제도 괜찮아요.</strong><span>제안할 대상과 방법은 모둠마다 달라질 수 있어요.</span></div></aside>
       <div class="home-word-row"><span>수업에서 쓰는 말</span>${D.glossary.map((w,i)=>`<button class="word-button" data-action="common-word" data-word="${i}">${esc(w[0])} +</button>`).join('')}<button class="text-button" data-action="sources">원문과 자료 출처 ↗</button></div>`;
     refreshGrid();
   }
@@ -118,15 +131,66 @@
   }
   function readingFigure(f) {
     if(f.display==='marine-chart')return `<details class="reading-figure"><summary>숫자 자료를 그래프와 표로 보기</summary>${barChart([[2023,1556],[2024,1394],[2025,850]],'톤')}</details>`;
-    if(f.display==='toad-counts')return `<details class="reading-figure"><summary>조사한 숫자를 표로 보기</summary><table><caption>기사에 소개된 조사 대상 50마리</caption><thead><tr><th scope="col">조사에서 확인한 일</th><th scope="col">마릿수</th></tr></thead><tbody><tr><th scope="row">살아남은 것으로 확인</th><td>30마리</td></tr><tr><th scope="row">길에서 사고로 목숨을 잃음</th><td>20마리</td></tr></tbody></table><p>온천천의 모든 두꺼비 수를 센 표는 아니에요.</p></details>`;
+    if(f.display==='toad-counts')return `<details class="reading-figure"><summary>조사한 숫자를 표로 보기</summary><table><caption>조사 대상 50마리 · 온천천의 전체 두꺼비 수는 아니에요.</caption><thead><tr><th scope="col">조사에서 확인한 일</th><th scope="col">마릿수</th></tr></thead><tbody><tr><th scope="row">살아남은 것으로 확인</th><td>30마리</td></tr><tr><th scope="row">길에서 사고로 목숨을 잃음</th><td>20마리</td></tr></tbody></table><p>온천천의 모든 두꺼비 수를 센 표는 아니에요.</p></details>`;
     return '';
   }
-  function factsView(c,readingId) {
+
+  function chunkReading(text, limit) {
+    const result=[];
+    let current='';
+    const sentences = String(text).trim().match(/[^.!?]+[.!?]*/gu) || [String(text)];
+    const add = part => {
+      const combined = current ? current+' '+part : part;
+      if (combined.length > limit && current) { result.push(current); current=part; }
+      else current=combined;
+    };
+    for (const sentence of sentences) {
+      const part=sentence.trim();
+      if(part.length<=limit)add(part);
+      else for(const word of part.split(/\s+/u))add(word);
+    }
+    if(current)result.push(current);
+    return result;
+  }
+  function readingPages(f) {
+    const font=state.large?28:24;
+    const lineWidth=Math.max(220,window.innerWidth-92);
+    const available=Math.max(110,window.innerHeight-510);
+    const lines=Math.max(2,Math.floor((available-16)/(font*1.7)));
+    const limit=window.innerWidth<700?160:Math.max(90,Math.min(480,Math.floor(lines*Math.floor(lineWidth/font)*.9)));
+    const segments=f.paragraphs.flatMap((text,i)=>chunkReading(text,limit).map(part=>({text:part,paragraph:i+1})));
+    const pages=[];let parts=[],length=0;
+    const flush=()=>{if(parts.length)pages.push({kind:'text',text:parts.map(p=>p.text).join(' '),parts});parts=[];length=0;};
+    for(const segment of segments){if(parts.length&&length+segment.text.length+1>limit)flush();parts.push(segment);length+=segment.text.length+1;}
+    flush();
+    if(f.display)pages.push({kind:'figure'});
+    pages.push({kind:'questions'});
+    return pages;
+  }
+  function pageFigure(f) {
+    if(f.display==='marine-chart')return `<div class="page-figure"><div class="chart-unit">부산항에서 주운 양 · 단위: 톤 (바다 전체의 쓰레기 양은 아니에요)</div><div class="chart" role="img" aria-label="2023년 1556톤, 2024년 1394톤, 2025년 850톤">${[[2023,1556],[2024,1394],[2025,850]].map(r=>`<div class="chart-row"><span class="chart-year">${r[0]}년</span><div class="bar-track"><div class="chart-bar" style="width:${r[1]/1556*100}%"></div><span class="bar-value">${r[1].toLocaleString('ko-KR')}</span></div></div>`).join('')}</div><button class="text-button" data-action="number-table" data-fact="${f.id}">숫자 표 크게 보기</button></div>`;
+    return `<div class="page-figure"><table class="number-table"><caption>조사 대상 50마리 · 온천천의 전체 두꺼비 수는 아니에요.</caption><thead><tr><th scope="col">조사에서 확인한 일</th><th scope="col">마릿수</th></tr></thead><tbody><tr><th scope="row">살아남은 것으로 확인</th><td>30마리</td></tr><tr><th scope="row">길에서 사고로 목숨을 잃음</th><td>20마리</td></tr></tbody></table></div>`;
+  }
+  function factsView(c,readingId,pageIndex=0) {
     if(!c.facts[0]?.paragraphs)return legacyFactsView(c);
-    const selected=c.facts.find(f=>f.id===readingId)||c.facts[0];
-    const index=c.facts.indexOf(selected),src=S[selected.source];
-    return `<section class="reading-layout" aria-label="주제별 읽기 자료"><aside class="reading-library"><button class="library-photo" data-action="photo" data-case="${c.id}" aria-label="${esc(c.photoLabel)} 크게 보기"><img src="${c.image}" alt="${esc(c.photoAlt)}"><span>${icon('zoom')}참고 사진 크게</span></button><div class="library-title">읽기 자료 ${c.facts.length}개 <small>자료를 골라 읽어요</small></div><nav class="reading-menu" aria-label="${esc(c.short)} 읽기 자료 목록">${c.facts.map((f,i)=>`<button class="reading-choice ${f.id===selected.id?'active':''}" data-action="reading" data-case="${c.id}" data-read="${f.id}" ${f.id===selected.id?'aria-current="page"':''}><span>${String(i+1).padStart(2,'0')}</span><strong>${esc(f.title)}</strong>${state.facts.includes(f.id)?'<b class="reading-saved" aria-label="근거 담음">✓</b>':''}</button>`).join('')}</nav></aside>
-      <article class="reading-paper" aria-labelledby="reading-title"><header class="reading-paper-head"><div class="reading-kicker"><span>${esc(selected.lens)}</span><small>자료 ${index+1} / ${c.facts.length}</small></div><h2 id="reading-title">${esc(selected.title)}</h2><p class="reading-source-date">${esc(src.org)} · ${esc(src.date)}</p></header><div class="reading-prose">${selected.paragraphs.map(p=>`<p>${esc(p)}</p>`).join('')}</div>${readingFigure(selected)}<div class="reading-questions"><div><span>자료에서 찾기</span><p>${esc(selected.findQuestion)}</p></div><div><span>함께 생각하기</span><p>${esc(selected.connectQuestion)}</p></div></div><div class="reading-paper-bottom"><div class="reading-source-actions"><button class="text-button" data-action="source-one" data-source="${selected.source}">출처 자세히</button><a href="${esc(src.url)}" target="_blank" rel="noopener noreferrer">기사·공식 자료 원문 ↗</a></div><button class="evidence-save" data-action="fact" data-fact="${selected.id}">${icon('plus')}근거 담기</button></div><nav class="reading-pager" aria-label="읽기 자료 앞뒤 이동"><button class="subtle-button" data-action="reading" data-case="${c.id}" data-read="${c.facts[Math.max(0,index-1)].id}" ${index===0?'disabled':''}>${icon('back')}앞 자료</button><span>${index+1} / ${c.facts.length}</span><button class="subtle-button" data-action="reading" data-case="${c.id}" data-read="${c.facts[Math.min(c.facts.length-1,index+1)].id}" ${index===c.facts.length-1?'disabled':''}>다음 자료${icon('arrow')}</button></nav></article></section>`;
+    const f=c.facts.find(f=>f.id===readingId)||c.facts[0],index=c.facts.indexOf(f),src=S[f.source];
+    const pages=readingPages(f), page=Math.min(pageIndex,pages.length-1), current=pages[page];
+    let content;
+    if(current.kind==='text')content=`<div class="reading-prose">${current.parts.map(p=>`<p>${esc(p.text)}</p>`).join('')}</div>`;
+    else if(current.kind==='figure')content=pageFigure(f);
+    else content=`<div class="reading-questions"><div><span>자료에서 찾기</span><p>${esc(f.findQuestion)}</p></div><div><span>함께 생각하기</span><p>${esc(f.connectQuestion)}</p></div></div>`;
+    return `<section class="reading-workspace" aria-label="주제별 읽기 자료"><div class="reading-selector"><label for="reading-select">읽을 자료</label><select class="form-field" id="reading-select" data-case="${c.id}">${c.facts.map((item,i)=>`<option value="${item.id}" ${item.id===f.id?'selected':''}>${String(i+1).padStart(2,'0')}. ${esc(item.title)}</option>`).join('')}</select><button class="secondary-button" data-action="reading-list" data-case="${c.id}">목록 ${c.facts.length}개</button><button class="secondary-button photo-shortcut" data-action="photo" data-case="${c.id}">${icon('zoom')}사진</button></div><article class="reading-paper paged-paper" aria-labelledby="reading-title"><header class="reading-paper-head"><div class="reading-kicker"><span>${esc(f.lens)}</span><small class="reading-source-meta">${esc(src.date)}</small><small>자료 ${index+1} / ${c.facts.length}</small></div><h2 id="reading-title">${esc(f.title)}</h2></header><div class="reading-window" aria-live="polite" tabindex="0" aria-label="${current.kind==='questions'?'자료의 질문':current.kind==='figure'?'숫자 자료':`읽기 ${page+1}쪽`}">${content}</div><div class="reading-dock"><div class="reading-tools"><button class="text-button" data-action="source-one" data-source="${f.source}">출처·원문</button><button class="evidence-save" data-action="fact" data-fact="${f.id}">${icon('plus')}근거 담기</button></div><nav class="page-controls" aria-label="읽기 쪽 넘기기"><button class="subtle-button" data-action="reading-page" data-dir="-1" ${page===0&&index===0?'disabled':''}>${icon('back')}${page===0&&index>0?'앞 자료':'앞 쪽'}</button><span class="page-count">${page+1} / ${pages.length}쪽</span><button class="primary-button" data-action="reading-page" data-dir="1" ${page===pages.length-1&&index===c.facts.length-1?'disabled':''}>${page===pages.length-1?(index===c.facts.length-1?'읽기 끝':'다음 자료'):'다음 쪽'}${icon('arrow')}</button></nav></div></article></section>`;
+  }
+  function moveReading(direction) {
+    const r=route();if(r.view!=='case'||r.tab!=='evidence'||!r.c.facts[0]?.paragraphs)return;
+    const c=r.c,f=c.facts.find(f=>f.id===r.reading)||c.facts[0],index=c.facts.indexOf(f),pages=readingPages(f);
+    let page=Math.min(r.page,pages.length-1)+direction, next=f;
+    if(page<0){if(index===0)return;next=c.facts[index-1];page=readingPages(next).length-1;}
+    if(page>=pages.length&&next===f){if(index===c.facts.length-1)return;next=c.facts[index+1];page=0;}
+    navigate(`#case=${c.id}&tab=evidence&read=${next.id}&page=${page}`);
+  }
+  function readingList(c) {
+    showModal('읽을 자료 고르기',`<div class="reading-list-grid">${c.facts.map((f,i)=>`<button class="reading-choice" data-action="reading" data-case="${c.id}" data-read="${f.id}"><span>${String(i+1).padStart(2,'0')}</span><strong>${esc(f.title)}</strong>${state.facts.includes(f.id)?'<b class="reading-saved" aria-label="근거 담음">✓</b>':''}</button>`).join('')}</div>`);
   }
   function barChart(rows,unit) {
     const max=Math.max(...rows.map(r=>r[1]));
@@ -140,25 +204,49 @@
     if(c.visual==='water-path') return `<svg class="diagram" viewBox="0 0 500 250" role="img" aria-label="하천의 물과 물속 산소, 물고기의 생활을 나타낸 개념 그림"><rect x="10" y="70" width="480" height="155" rx="18" fill="#b7d9df"/><path d="M10 90q60-25 120 0t120 0t120 0t120 0" stroke="#eaf5f5" stroke-width="5" fill="none"/><path d="m82 20 15 25H67Z" fill="#8babb6"/><path d="m126 28 12 22h-24Z" fill="#8babb6"/><text x="319" y="41" text-anchor="middle" font-size="17">물속에도 산소가 있어요</text><g fill="#ebfafb" stroke="#6d9caa" stroke-width="2"><circle cx="120" cy="140" r="14"/><circle cx="156" cy="177" r="9"/><circle cx="185" cy="116" r="11"/><circle cx="349" cy="120" r="12"/></g><g transform="translate(288 168)"><ellipse rx="44" ry="23" fill="#578e95"/><path d="m35 0 28-25v50Z" fill="#578e95"/><circle cx="-25" cy="-5" r="4" fill="#203e40"/><path d="M-1-21 13-37l7 20" fill="#578e95"/></g><text x="113" y="212" font-size="14">산소</text><text x="242" y="212" font-size="14">물고기의 호흡</text></svg><p class="diagram-question">물의 양과 물속 산소는 같은 뜻일까요?</p>`;
     return `<div class="glass-scene" id="glass-scene"><svg class="diagram" viewBox="0 0 500 250" role="img" aria-label="나무 풍경이 비치는 유리창. 버튼으로 무늬를 보이거나 숨길 수 있습니다."><rect x="15" y="12" width="470" height="215" rx="17" fill="#d9e8d0"/><path d="M16 163q100-45 200 5t270-10v69H16Z" fill="#9fbb87"/><path d="M99 153V83m40 70V76m210 76V84" stroke="#6d8462" stroke-width="10"/><g fill="#9cbc81"><circle cx="99" cy="63" r="30"/><circle cx="139" cy="57" r="30"/><circle cx="349" cy="62" r="32"/></g><rect x="192" y="31" width="126" height="171" fill="#deeff0" fill-opacity=".46" stroke="#738b89" stroke-width="6"/><path d="m208 65 45-24m-45 51 60-33" stroke="#fff" stroke-opacity=".6" stroke-width="5"/><g class="glass-dots" fill="#315e53">${Array.from({length:8},(_,r)=>Array.from({length:5},(_,col)=>`<circle cx="${207+col*24}" cy="${47+r*20}" r="3.5"/>`).join('')).join('')}</g><path d="m377 100 12-9 14 12 17-5-12 13-14 2-17-13Z" fill="#50785c"/><text x="85" y="205" font-size="14">주변 나무</text><text x="250" y="222" text-anchor="middle" font-size="14">유리창</text></svg></div><div class="diagram-controls"><button class="secondary-button" data-action="glass" aria-pressed="false">${icon('plus')}유리창에 무늬 보이기</button></div>`;
   }
+
   function scienceView(c) {
-    return `<div class="science-layout"><section class="surface"><div class="eyebrow">자료와 개념 그림</div><h2>${esc(c.visualTitle)}</h2><div class="visual-box">${visual(c)}</div><div class="visual-note">${esc(c.visualNote)}</div>${c.extraSource?`<p class="additional-reading">더 살펴볼 자료: ${sourceLink(c.extraSource,'경보가 있어도 폐사가 없었던 사례')}</p>`:''}</section><section class="surface"><div class="eyebrow">과학으로 연결하기</div><h2>어떤 관계가 있을까요?</h2><div class="thinking-question">${esc(c.science.question)}</div><details class="reveal-box"><summary>생각한 뒤, 관계를 짚어 보기</summary><div class="reveal-content">${c.science.nodes.map((n,i)=>`<div class="connection-step"><b>${i+1}</b><div><strong>${esc(n.name)}</strong><p>${esc(n.text)}</p></div></div>`).join('')}</div></details><details class="reveal-box"><summary>이미 배운 과학과 연결하기</summary><div class="reveal-content"><p>${esc(c.science.connection)}</p></div></details><div class="section-label" style="margin-top:20px">${icon('question')}어려운 낱말을 눌러 봐요</div><div class="glossary">${c.words.map((w,i)=>`<button class="word-button" data-action="word" data-case="${c.id}" data-word="${i}">${esc(w[0])} +</button>`).join('')}</div></section></div>`;
+    let picture=visual(c);
+    if(c.visual==='marine-chart')picture=picture.replace(/<details class="chart-table">[\s\S]*?<\/details>/,'<button class="text-button science-number-table" data-action="number-table">숫자 표 크게 보기</button>');
+    return `<div class="science-layout compact-science"><section class="surface"><h2>${esc(c.visualTitle)}</h2><div class="visual-box">${picture}</div><div class="visual-note">${esc(c.visualNote)}</div>${c.extraSource?`<p class="additional-reading">더 살펴볼 자료: ${sourceLink(c.extraSource,'경보가 있어도 폐사가 없었던 사례')}</p>`:''}</section><section class="surface"><h2>어떤 관계가 있을까요?</h2><div class="thinking-question">${esc(c.science.question)}</div><div class="science-actions"><button class="secondary-button" data-action="science-detail" data-case="${c.id}" data-part="nodes">생각한 뒤, 관계 짚어 보기</button><button class="secondary-button" data-action="science-detail" data-case="${c.id}" data-part="connection">배운 과학과 연결하기</button></div><div class="glossary">${c.words.map((w,i)=>`<button class="word-button" data-action="word" data-case="${c.id}" data-word="${i}">${esc(w[0])} +</button>`).join('')}</div></section></div>`;
   }
+
   function thinkView(c) {
-    return `<div class="section-label">${icon('users')}누구에게 무엇이 필요할까요?</div><p class="voice-notice">각 입장에서 무엇이 필요한지 생각하도록 만든 카드예요. 실제 사람의 말을 옮긴 인터뷰는 아니에요.</p><section class="voices-grid">${c.voices.map((v,i)=>`<article class="voice-card"><div class="voice-icon">${icon(i===2?'leaf':'users')}</div><h3>${esc(v.who)}</h3><p>${esc(v.view)}</p></article>`).join('')}</section><section class="surface"><div class="eyebrow">답을 정하기 전에</div><h2>우리 동네 사람과 생물을 함께 생각해요</h2><ol class="question-list">${c.questions.map((q,i)=>`<li><span>${i+1}</span><div>${esc(q)}</div></li>`).join('')}</ol><div class="button-row" style="margin-top:23px"><button class="primary-button" data-action="notebook">${icon('basket')}탐구 바구니에서 정리하기</button><button class="secondary-button" data-action="tab" data-case="${c.id}" data-tab="evidence">근거 자료 다시 읽기</button></div></section>`;
+    return `<div class="think-workspace"><p class="voice-notice">입장을 생각해 보도록 만든 카드예요. 실제 인터뷰는 아니에요.</p><section class="voices-grid">${c.voices.map((v,i)=>`<article class="voice-card"><div class="voice-icon">${icon(i===2?'leaf':'users')}</div><h3>${esc(v.who)}</h3><p>${esc(v.view)}</p></article>`).join('')}</section><section class="think-prompt"><h2>누구에게 무엇이 필요할까요?</h2><p>사람과 생물의 생활을 함께 생각해요.</p><div class="button-row"><button class="secondary-button" data-action="think-questions" data-case="${c.id}">모둠 토의 질문 ${c.questions.length}개</button><button class="primary-button" data-action="notebook">${icon('basket')}바구니에서 정리하기</button></div></section></div>`;
   }
-  function caseView(c,tab,readingId) {
-    if(!state.read.includes(c.id)) {state.read.push(c.id);save();}
+
+  function caseView(c,tab,readingId,pageIndex=0) {
+    if(!state.read.includes(c.id)){state.read.push(c.id);save();}
     const tabs=[['evidence','자료 읽기'],['science','생태계 연결'],['think','사람과 함께 생각']];
-    main.innerHTML=`<button class="back-button" data-action="home">${icon('back')}다른 주제 살펴보기</button><header class="case-heading"><div><div class="location-meta"><span>${esc(c.place)}</span><span class="status-pill ${c.archived?'prevention':''}">${c.archived?'이전판에 담은 자료':`읽기 자료 ${c.facts.length}개`}</span></div><h1>${esc(c.title.replace('\n',' '))}</h1></div><button class="secondary-button" data-action="candidate" data-case="${c.id}">${icon('bookmark')}문제 후보에 담기</button></header><nav class="detail-tabs" aria-label="이 주제 탐구 단계">${tabs.map((t,i)=>`<button class="detail-tab ${tab===t[0]?'active':''}" data-action="tab" data-case="${c.id}" data-tab="${t[0]}" ${tab===t[0]?'aria-current="page"':''}><span>${i+1}</span>${t[1]}</button>`).join('')}</nav><div class="detail-content">${tab==='science'?scienceView(c):tab==='think'?thinkView(c):factsView(c,readingId)}</div>${tab==='evidence'?'':`<div class="detail-bottom"><p>${tab==='science'?'생물의 생활과 우리 동네 사람의 생활을 연결해 설명해 보세요.':'같은 주제도 제안할 대상과 방법이 달라질 수 있어요.'}</p><div class="button-row"><button class="text-button" data-action="case-sources" data-case="${c.id}">이 주제의 출처 모아보기</button>${tab==='science'?`<button class="primary-button" data-action="tab" data-case="${c.id}" data-tab="think">사람과 함께 생각하기${icon('arrow')}</button>`:''}</div></div>`}`;
+    main.innerHTML=`<header class="case-toolbar"><button class="back-button" data-action="home" aria-label="다른 주제 살펴보기">${icon('back')}다른 주제</button><div class="case-title"><span>${esc(c.place)}${c.archived?' · 이전판 자료':''}</span><h1>${esc(c.short)}</h1></div><button class="secondary-button" data-action="candidate" data-case="${c.id}">${icon('bookmark')}문제 후보에 담기</button></header><nav class="detail-tabs" aria-label="이 주제 탐구 단계">${tabs.map((t,i)=>`<button class="detail-tab ${tab===t[0]?'active':''}" data-action="tab" data-case="${c.id}" data-tab="${t[0]}" ${tab===t[0]?'aria-current="page"':''}><span>${i+1}</span>${t[1]}</button>`).join('')}<button class="text-button case-source-shortcut" data-action="case-sources" data-case="${c.id}">출처 모아보기</button></nav><div class="detail-content">${tab==='science'?scienceView(c):tab==='think'?thinkView(c):factsView(c,readingId,pageIndex)}</div>`;
   }
+
   function notebook() {
-    main.innerHTML=`<header class="notebook-heading"><div><div class="eyebrow">관찰에서 우리의 질문으로</div><h1>우리의 탐구 바구니</h1><p>주제 ${state.candidates.length}개 · 근거 자료 ${state.facts.length}개를 담았어요.</p></div><div class="button-row"><button class="secondary-button" data-action="home">${icon('plus')}자료 더 찾아보기</button><button class="text-button" data-action="import">기록 불러오기</button></div></header><div class="notebook-layout"><section class="notebook-panel"><h2>탐구할 문제를 골라요</h2><p class="muted">후보를 비교하고, 이번에 탐구할 주제 하나를 표시하세요.</p>${state.candidates.length?`<div class="candidate-list">${state.candidates.map(id=>{const c=findCase(id);return `<div class="candidate ${state.selected===id?'selected':''}"><input type="radio" id="choose-${id}" name="chosen-case" value="${id}" ${state.selected===id?'checked':''} aria-label="${esc(c.short)} 탐구 주제로 선택"><div><label for="choose-${id}"><strong>${esc(c.short)}</strong><small>${esc(c.place)} · ${c.status}</small></label><a href="#case=${id}&tab=evidence">자료 다시 살펴보기 ↗</a></div><button class="remove-button" data-action="candidate" data-case="${id}" aria-label="${esc(c.short)} 바구니에서 빼기">×</button></div>`}).join('')}</div>${state.candidates.length>=2?'<div class="compare-strip"><span>어떤 문제를 탐구할지 고민되나요?</span><button class="secondary-button" data-action="compare">두 주제 비교하기 ↗</button></div>':''}`:`<div class="empty-state">${icon('basket')}<h2>어떤 문제가 궁금한가요?</h2><p>문제 탐색에서 관심 있는 주제를 살펴보고 책갈피 버튼으로 담아 보세요.</p><button class="primary-button" data-action="home">문제 찾아보기 ${icon('arrow')}</button></div>`}<h2 class="notes-title">함께 담은 근거 자료</h2>${state.facts.length?state.facts.map(id=>{const f=findFact(id),c=findCase(f.caseId),s=S[f.source];return `<article class="saved-fact"><div class="saved-fact-head"><div><span class="source-topic">${esc(c.short)}</span><strong>${esc(f.title)}</strong></div><button class="remove-button" data-action="remove-fact" data-fact="${id}" aria-label="${esc(f.title)} 근거 빼기">×</button></div><p>${esc(f.text)}</p>${sourceLink(f.source,`${s.org} · ${s.date}`)}<label class="sr-only" for="note-${id}">이 근거에서 내가 주목한 점</label><textarea id="note-${id}" class="form-field" data-note="${id}" maxlength="300" placeholder="이 자료에서 내가 주목한 점을 적어도 좋아요.">${esc(state.notes[id])}</textarea></article>`}).join(''):'<div class="empty-small">내 생각을 뒷받침하는 자료의 ‘근거 담기’를 누르면 여기에 모여요.</div>'}</section><section class="notebook-panel"><div class="eyebrow">우리 말로 정리하기</div><h2>어떤 문제를 탐구할까요?</h2><p class="muted">자료에서 확인한 사실과 나의 생각을 구분해 적어 보세요.</p><label class="field-label" for="group-name">이름 또는 모둠<small>선택 입력</small></label><input class="form-field" id="group-name" data-field="name" maxlength="35" placeholder="예: 3모둠" value="${esc(state.name)}"><label class="field-label" for="problem-note">우리가 발견한 문제</label><textarea class="form-field" id="problem-note" data-field="problem" maxlength="240" placeholder="어디에서, 어떤 생물이나 환경에, 무슨 문제가 있나요?">${esc(state.problem)}</textarea><div class="field-counter" data-counter="problem">${state.problem.length}/240</div><div class="notebook-bridge"><label class="field-label" for="eco-note">생물의 생활에는 어떤 일이 생기나요?</label><textarea class="form-field compact-field" id="eco-note" data-field="ecoNote" maxlength="240" placeholder="먹이, 이동, 숨을 곳, 물과 땅의 변화를 생각해요.">${esc(state.ecoNote)}</textarea><label class="field-label" for="people-note">이곳의 사람들에게는 무엇이 필요한가요?</label><textarea class="form-field compact-field" id="people-note" data-field="peopleNote" maxlength="240" placeholder="주민, 이용자, 관리하는 사람을 함께 생각해요.">${esc(state.peopleNote)}</textarea><label class="field-label" for="target-note">누구에게 제안하고 싶나요?</label><input class="form-field" id="target-note" data-field="target" maxlength="120" placeholder="우리 반 친구, 공원 이용자, 구청 등에서 생각해요." value="${esc(state.target)}"></div><label class="field-label" for="question-note">더 알아보고 싶은 점</label><textarea class="form-field" id="question-note" data-field="question" maxlength="320" placeholder="원인, 영향, 사람들의 생각 중 무엇이 더 궁금한가요?">${esc(state.question)}</textarea><div class="field-counter" data-counter="question">${state.question.length}/320</div><div class="export-row"><button class="primary-button" data-action="export-png">${icon('download')}탐구 노트 이미지</button><button class="secondary-button" data-action="print">${icon('print')}인쇄 / PDF</button><button class="secondary-button" data-action="export-txt">글로 내려받기</button><button class="secondary-button" data-action="export-json">기록 파일 저장</button></div><p class="local-note">기록은 지금 사용하는 브라우저에 저장돼요. 다른 기기로 옮기려면 ‘기록 파일 저장’ 후 ‘기록 불러오기’를 이용하세요. 친구나 선생님에게 자동으로 전송되지는 않아요.</p><div style="margin-top:22px;text-align:right"><button class="text-button" data-action="reset" style="font-size:17px;color:#8c6551">이 기기의 탐구 기록 지우기</button></div></section></div>`;
+    const r=route(),step=r.view==='notebook'?r.step:1;
+    const steps=['주제와 근거','발견한 문제','생물과 사람','제안과 저장'];
+    const f=findFact(state.facts.includes(r.fact)?r.fact:state.facts[0]),factIndex=f?state.facts.indexOf(f.id):-1;
+    let content='';
+    if(step===1){
+      content=`<section class="topic-pick"><label class="field-label" for="chosen-case">이번에 탐구할 주제</label><div class="topic-pick-row"><select class="form-field" name="chosen-case" id="chosen-case"><option value="">아직 고르지 않았어요</option>${state.candidates.map(id=>`<option value="${id}" ${state.selected===id?'selected':''}>${esc(findCase(id).short)}</option>`).join('')}</select><button class="secondary-button" data-action="candidate-list">후보 ${state.candidates.length}개 보기</button>${state.candidates.length>1?'<button class="secondary-button" data-action="compare">두 주제 비교</button>':''}</div></section>`;
+      if(f){const c=findCase(f.caseId),source=S[f.source];content+=`<section class="saved-evidence"><div class="evidence-pick-row"><label class="field-label" for="saved-fact-select">담은 근거 ${state.facts.length}개</label><select class="form-field" id="saved-fact-select">${state.facts.map((id,i)=>`<option value="${id}" ${id===f.id?'selected':''}>${i+1}. ${esc(findFact(id).title)}</option>`).join('')}</select><button class="remove-button" data-action="remove-fact" data-fact="${f.id}" aria-label="${esc(f.title)} 근거 빼기">×</button></div><div class="evidence-summary"><span class="source-topic">${esc(c.short)}</span><p>${esc(f.text)}</p><button class="text-button" data-action="source-one" data-source="${f.source}">${esc(source.org)} · 출처 보기</button></div><label class="field-label note-label" for="note-${f.id}">이 근거에서 내가 주목한 점</label><textarea id="note-${f.id}" class="form-field evidence-note" data-note="${f.id}" maxlength="300" placeholder="자료에서 무엇을 찾았나요?">${esc(state.notes[f.id])}</textarea><nav class="evidence-pager" aria-label="담은 근거 앞뒤 이동"><button class="text-button" data-action="saved-fact-page" data-dir="-1" ${factIndex===0?'disabled':''}>앞 근거</button><span>${factIndex+1} / ${state.facts.length}</span><button class="text-button" data-action="saved-fact-page" data-dir="1" ${factIndex===state.facts.length-1?'disabled':''}>다음 근거</button><a href="#case=${c.id}&tab=evidence&read=${f.id}">자료 다시 읽기 ↗</a></nav></section>`;}
+      else content+=`<div class="notebook-empty"><h2>관심 있는 자료를 담아 보세요.</h2><p>읽기 화면의 ‘근거 담기’를 누르면 여기에 모여요.</p><button class="primary-button" data-action="home">자료 찾아보기${icon('arrow')}</button></div>`;
+    }
+    if(step===2)content=`<section class="problem-step"><div class="name-line"><label class="field-label" for="group-name">이름 또는 모둠 <small>선택</small></label><input class="form-field" id="group-name" data-field="name" maxlength="35" placeholder="예: 3모둠" value="${esc(state.name)}"></div><label class="field-label" for="problem-note">우리가 발견한 문제</label><p class="field-help">어디에서, 어떤 생물이나 환경에, 무슨 일이 생기나요?</p><textarea class="form-field problem-field" id="problem-note" data-field="problem" maxlength="240" placeholder="자료에서 확인한 사실과 우리 생각을 구분해 적어요.">${esc(state.problem)}</textarea><div class="field-counter" data-counter="problem">${state.problem.length}/240</div></section>`;
+    if(step===3)content=`<div class="notebook-bridge pair-step"><section><label class="field-label" for="eco-note">생물의 생활에는 어떤 일이 생기나요?</label><p class="field-help">먹이, 이동, 숨을 곳, 물과 땅의 변화를 생각해요.</p><textarea class="form-field compact-field" id="eco-note" data-field="ecoNote" maxlength="240" placeholder="어떤 생물의 어떤 생활과 연결되나요?">${esc(state.ecoNote)}</textarea></section><section><label class="field-label" for="people-note">이곳의 사람들에게는 무엇이 필요한가요?</label><p class="field-help">주민, 이용자, 관리하는 사람을 함께 생각해요.</p><textarea class="form-field compact-field" id="people-note" data-field="peopleNote" maxlength="240" placeholder="사람들에게 필요한 것은 무엇인가요?">${esc(state.peopleNote)}</textarea></section></div>`;
+    if(step===4)content=`<div class="final-note-grid"><section><label class="field-label" for="target-note">누구에게 제안하고 싶나요?</label><input class="form-field" id="target-note" data-field="target" maxlength="120" placeholder="친구, 공원 이용자, 구청 등" value="${esc(state.target)}"><label class="field-label" for="question-note">더 알아보고 싶은 점</label><textarea class="form-field question-field" id="question-note" data-field="question" maxlength="320" placeholder="원인이나 사람들의 생각 중 더 궁금한 것은 무엇인가요?">${esc(state.question)}</textarea><div class="field-counter" data-counter="question">${state.question.length}/320</div></section><section class="save-panel"><h2>탐구 노트 내려받기</h2><div class="export-row"><button class="primary-button" data-action="export-png">${icon('download')}노트 이미지</button><button class="secondary-button" data-action="print">${icon('print')}인쇄 / PDF</button><button class="secondary-button" data-action="export-txt">글로 내려받기</button><button class="secondary-button" data-action="export-json">기록 파일 저장</button></div><p class="local-note">기록은 이 브라우저에 자동 저장돼요. 다른 기기로 옮길 때에는 ‘기록 파일 저장’ 후 ‘기록 불러오기’를 이용해요.</p><button class="text-button reset-note" data-action="reset">이 기기의 기록 지우기</button></section></div>`;
+    main.innerHTML=`<header class="notebook-top"><div><h1>우리의 탐구 바구니</h1><span>주제 ${state.candidates.length}개 · 근거 ${state.facts.length}개</span></div><div class="button-row"><button class="secondary-button" data-action="home">자료 더 찾기</button><button class="text-button" data-action="import">기록 불러오기</button>${step!==4?'<button class="secondary-button" data-action="note-step" data-step="4">저장 / 내려받기</button>':''}</div></header><nav class="note-steps" aria-label="탐구 기록 작성 단계">${steps.map((label,i)=>`<button class="note-step ${step===i+1?'active':''}" data-action="note-step" data-step="${i+1}" ${step===i+1?'aria-current="step"':''}><b>${i+1}</b>${label}</button>`).join('')}</nav><div class="notebook-page" data-note-step="${step}">${content}</div><nav class="notebook-dock" aria-label="기록 단계 앞뒤 이동"><button class="secondary-button" data-action="note-step" data-step="${step-1}" ${step===1?'disabled':''}>${icon('back')}앞 단계</button><span>${step} / 4단계 · 쓴 글은 자동 저장돼요.</span>${step<4?`<button class="primary-button" data-action="note-step" data-step="${step+1}">다음 단계${icon('arrow')}</button>`:'<button class="primary-button" data-action="home">자료 더 찾아보기</button>'}</nav>`;
+  }
+  function candidateList() {
+    showModal('담아 둔 주제 후보',state.candidates.length?`<div class="candidate-list">${state.candidates.map(id=>{const c=findCase(id);return `<div class="candidate"><div><strong>${esc(c.short)}</strong><a href="#case=${id}&tab=evidence">자료 다시 읽기 ↗</a></div><button class="secondary-button" data-action="choose-candidate" data-case="${id}">${state.selected===id?'선택한 주제':'탐구 주제로'}</button><button class="remove-button" data-action="candidate" data-case="${id}" aria-label="${esc(c.short)} 바구니에서 빼기">×</button></div>`;}).join('')}</div>`:'<p>아직 담은 주제가 없어요. 문제 탐색에서 관심 있는 주제를 담아 보세요.</p>');
   }
   function render() {
     const r=route();
     main.classList.remove('home-view');
+    document.body.dataset.view=r.view;
+    document.body.dataset.tab=r.tab||'';
+    document.body.dataset.legacy=r.view==='case'&&r.c.archived?'true':'false';
     document.querySelectorAll('[data-nav]').forEach(b=>{const active=b.dataset.nav===(r.view==='notebook'?'notebook':'explore');b.classList.toggle('active',active);if(active)b.setAttribute('aria-current','page');else b.removeAttribute('aria-current');});
-    if(r.view==='case')caseView(r.c,r.tab,r.reading);else if(r.view==='notebook')notebook();else explore();
+    if(r.view==='case')caseView(r.c,r.tab,r.reading,r.page);else if(r.view==='notebook')notebook();else explore();
     document.title=r.view==='case'?`${r.c.short} · 부산 생태탐사대`:r.view==='notebook'?'탐구 바구니 · 부산 생태탐사대':'부산 생태탐사대 · 우리 지역의 문제를 찾아요';
     updateUI();
   }
@@ -177,7 +265,7 @@
     showModal(title,`<p>읽기 자료는 아래 원문을 바탕으로 4학년이 읽기 쉽게 다시 구성했어요. 자료의 시기와 범위를 확인하며 읽어 보세요.</p><p class="muted">마지막 원문 확인: ${D.checked} · 원문은 새 창으로 열려요. 외부 사이트가 잠시 열리지 않아도 앱의 읽기 자료는 볼 수 있어요.</p>${ids.map(sourceCard).join('')}<h3>사진과 개념 그림</h3><p class="muted">사진은 각 주제의 ‘사진 크게’에서 제공 기관과 원문을 확인할 수 있어요. 장소·생물 참고 사진이며 사건 현장 사진과 구분해 표시했어요. 관계 그림과 그래프는 원문을 바탕으로 별도 구성했습니다.</p>`);
   }
   function guide() {
-    showModal('자료를 읽고 우리 모둠의 문제를 찾아요',`<p>부산의 세 가지 주제를 살펴봐요. 각 주제에는 <strong>지역의 일·생물의 생활·사람들의 노력</strong>을 알아볼 자료가 8개씩 있어요.</p><div class="guide-steps"><div class="guide-step"><span>1</span><div><h3>한 주제의 자료를 골라 읽어요</h3><p>자료 목록에서 읽고 싶은 글을 눌러요. 사진, 조사 결과, 지역의 활동도 함께 살펴봐요.</p></div></div><div class="guide-step"><span>2</span><div><h3>근거를 담고 설명해요</h3><p>내 생각을 뒷받침하는 자료의 ‘근거 담기’를 눌러요. 자료에서 찾은 사실과 나의 생각을 구분해요.</p></div></div><div class="guide-step"><span>3</span><div><h3>사람과 생물을 함께 생각해요</h3><p>생물에게 생긴 일과 이곳을 이용하는 사람에게 필요한 것을 연결해요. 구청이나 지역 기관이 하는 일도 찾아요.</p></div></div><div class="guide-step"><span>4</span><div><h3>모둠의 문제를 정리해요</h3><p>같은 주제를 골라도 괜찮아요. 무엇을 바꿀지, 누구에게 제안할지에 따라 다른 방법을 생각할 수 있어요.</p></div></div></div><p class="muted">출처는 글을 쓴 기관이나 사람, 글이 실린 곳을 뜻해요. 자료가 만들어진 때도 확인해요.</p><div class="button-row" style="margin-top:18px"><button class="primary-button" data-action="close-modal">자료 살펴보기 ${icon('arrow')}</button></div>`);
+    showModal('자료를 읽고 우리 모둠의 문제를 찾아요',`<p>부산의 세 가지 주제를 살펴봐요. 각 주제에는 <strong>지역의 일·생물의 생활·사람들의 노력</strong>을 알아볼 자료가 8개씩 있어요.</p><div class="guide-steps"><div class="guide-step"><span>1</span><div><h3>한 주제의 자료를 골라 읽어요</h3><p>상단 목록에서 읽을 자료를 골라요. 아래 ‘앞 쪽·다음 쪽’으로 넘겨 읽어요. 사진과 숫자 자료도 볼 수 있어요.</p></div></div><div class="guide-step"><span>2</span><div><h3>근거를 담고 설명해요</h3><p>내 생각을 뒷받침하는 자료의 ‘근거 담기’를 눌러요. 자료에서 찾은 사실과 나의 생각을 구분해요.</p></div></div><div class="guide-step"><span>3</span><div><h3>사람과 생물을 함께 생각해요</h3><p>생물에게 생긴 일과 이곳을 이용하는 사람에게 필요한 것을 연결해요. 구청이나 지역 기관이 하는 일도 찾아요.</p></div></div><div class="guide-step"><span>4</span><div><h3>모둠의 문제를 정리해요</h3><p>탐구 바구니의 4단계를 차례로 눌러 정리해요. 쓴 글은 자동 저장돼요. 같은 주제도 서로 다른 제안을 할 수 있어요.</p></div></div></div><p class="muted">출처는 글을 쓴 기관이나 사람, 글이 실린 곳을 뜻해요. 자료가 만들어진 때도 확인해요.</p><div class="button-row" style="margin-top:18px"><button class="primary-button" data-action="close-modal">자료 살펴보기 ${icon('arrow')}</button></div>`);
   }
   function teacher() {
     showModal('선생님을 위한 수업 안내',`<p>사회 ‘지역문제 해결’, 과학 ‘생물과 환경’, 국어 ‘제안하는 글쓰기’를 연결하는 <strong>3개 주제·24개 읽기 자료</strong>입니다. 4학년이 읽을 수 있도록 용어와 문장을 점검했습니다.</p><h3>같은 주제, 서로 다른 제안</h3><p>6모둠이 세 가지 주제 중 자유롭게 고릅니다. 두 모둠 이상이 같은 주제를 골라도, 집중할 문제·제안할 대상·실천 방법이 다를 수 있습니다. 모둠원끼리 자료를 나누어 읽고 찾은 근거를 설명하며 모으는 방식으로도 활용할 수 있습니다.</p><h3>지역문제와 생태계 문제를 함께 보기</h3><ol><li>어떤 생물의 어떤 생활이 어려워졌는가?</li><li>이곳을 이용하거나 관리하는 사람은 누구이며 무엇이 필요한가?</li><li>이미 해 온 일은 무엇이고, 우리가 더 알아볼 것은 무엇인가?</li><li>누구에게 어떤 변화를 제안하며, 그 까닭을 어떤 자료로 설명할 것인가?</li></ol><h3>5차시 연결</h3><p>①자료 조사·문제 발견 → ②해결 방법 비교·선택 → ③개인별 제안하는 글과 고쳐쓰기 → ④모둠별 영상·만화·포스터 제작 → ⑤제안회·질문·수정·전달로 이어 갑니다.</p><h3>읽기 자료의 성격</h3><p>지역 기사, 공공기관의 설명, 생물 자료와 숫자 자료를 짧은 두 문단 글로 재구성했습니다. 각 글에는 사실을 찾는 질문과 사람·생물을 함께 생각하는 질문이 있습니다. 원문의 어려운 제목은 출처 정보로만 보존했습니다. ‘생태계·보전·근거·제안’은 배워야 할 용어로 남겨 쉬운 뜻을 안내합니다.</p><p>숫자가 나타내는 범위와 자료의 날짜를 확인합니다. 과거 조사 결과나 당시 계획을 지금 모두에게 적용되는 상태로 단정하지 않도록 지도해 주세요. 입장 카드는 수업을 위해 구성한 관점이며 실제 인터뷰가 아닙니다.</p><h3>기록과 배포</h3><p>GitHub·Vercel에 배포하는 정적 앱입니다. 로그인·Firebase 설정 없이 각 브라우저에 독립 저장합니다. 같은 주소로 접속해도 모둠 공동편집이나 교사 자동 수합은 이루어지지 않습니다. 대표 기기에 기록하거나 내려받은 노트를 모아 활용할 수 있습니다.</p><p>이전판에 담아 둔 기록은 유지합니다. 홈 화면에는 새 세 주제만 표시하고, 이전 기록에 연결된 자료는 해당 바구니에서 다시 읽거나 내보낼 수 있습니다.</p><h3>자료 관리</h3><p>원문 확인 ${D.checked}. 자료는 자동 갱신되지 않습니다. data.js·SOURCES.md·TEACHER_NOTES.md에서 출처, 용어 점검, 수업 활용 안내를 확인할 수 있습니다.</p>`);
@@ -190,7 +278,7 @@
       if(count&&!confirmed){showModal('이 주제를 바구니에서 뺄까요?',`<p><strong>${esc(c.short)}</strong> 주제와 여기에 담은 근거 ${count}개, 해당 근거에 쓴 메모가 함께 지워져요.</p><p class="muted">‘발견한 문제’와 ‘더 알아보고 싶은 점’에 쓴 글은 남아 있어요.</p><div class="button-row" style="margin-top:20px"><button class="secondary-button" data-action="close-modal">계속 살펴보기</button><button class="primary-button" data-action="confirm-remove" data-case="${id}">주제와 근거 빼기</button></div>`);return;}
       state.candidates=state.candidates.filter(v=>v!==id);state.facts=state.facts.filter(f=>{if(findFact(f).caseId===id){delete state.notes[f];return false;}return true;});if(state.selected===id)state.selected='';toast('바구니에서 주제를 뺐어요.');
     }else{state.candidates.push(id);toast('문제 후보에 담았어요. 탐구 바구니에서 살펴보세요.');}
-    save();if(route().view==='notebook')notebook();updateUI();
+    save();if(modal.open)closeModal();if(route().view==='notebook')notebook();updateUI();
   }
   function toggleFact(id) {
     const f=findFact(id);if(!f)return;
@@ -245,19 +333,29 @@
   document.addEventListener('click',e=>{
     const b=e.target.closest('[data-action]');if(!b)return;
     const a=b.dataset.action;e.preventDefault();
-    if(a==='home')navigate('#view=explore');
-    else if(a==='notebook')navigate('#view=notebook');
+    if(a==='home'){if(modal.open)closeModal();navigate('#view=explore');}
+    else if(a==='notebook'){if(modal.open)closeModal();navigate('#view=notebook');}
     else if(a==='case')navigate(`#case=${b.dataset.case}&tab=evidence`);
     else if(a==='tab')navigate(`#case=${b.dataset.case}&tab=${b.dataset.tab}`);
-    else if(a==='reading')navigate(`#case=${b.dataset.case}&tab=evidence&read=${b.dataset.read}`);
+    else if(a==='reading'){if(modal.open)closeModal();navigate(`#case=${b.dataset.case}&tab=evidence&read=${b.dataset.read}&page=0`);}
+    else if(a==='reading-page')moveReading(Number(b.dataset.dir));
+    else if(a==='reading-list')readingList(findCase(b.dataset.case));
+    else if(a==='home-page'){homePage+=Number(b.dataset.dir);refreshGrid();}
+    else if(a==='note-step')navigate(`#view=notebook&step=${Math.max(1,Math.min(4,Number(b.dataset.step)||1))}`);
+    else if(a==='saved-fact-page'){const r=route(),index=state.facts.indexOf(state.facts.includes(r.fact)?r.fact:state.facts[0]);const id=state.facts[index+Number(b.dataset.dir)];if(id)navigate(`#view=notebook&step=1&fact=${id}`);}
+    else if(a==='candidate-list')candidateList();
+    else if(a==='choose-candidate'){if(state.candidates.includes(b.dataset.case)){state.selected=b.dataset.case;save();closeModal();notebook();updateUI();toast('이번에 탐구할 주제로 정했어요.');}}
+    else if(a==='science-detail'){const c=findCase(b.dataset.case);showModal(b.dataset.part==='nodes'?'생각한 뒤, 관계 짚어 보기':'배운 과학과 연결하기',b.dataset.part==='nodes'?`<div class="reveal-content">${c.science.nodes.map((n,i)=>`<div class="connection-step"><b>${i+1}</b><div><strong>${esc(n.name)}</strong><p>${esc(n.text)}</p></div></div>`).join('')}</div>`:`<p>${esc(c.science.connection)}</p>`);}
+    else if(a==='think-questions'){const c=findCase(b.dataset.case);showModal('우리 모둠이 함께 생각할 질문',`<ol class="question-list">${c.questions.map((q,i)=>`<li><span>${i+1}</span><div>${esc(q)}</div></li>`).join('')}</ol><button class="primary-button" data-action="notebook" style="margin-top:20px">바구니에서 정리하기</button>`);}
+    else if(a==='number-table')showModal('부산항에서 주운 양',`<table class="number-table"><caption>부산항의 물에 떠 있는 쓰레기를 주워 모은 기록</caption><thead><tr><th scope="col">연도</th><th scope="col">무게</th></tr></thead><tbody><tr><th scope="row">2023년</th><td>1,556톤</td></tr><tr><th scope="row">2024년</th><td>1,394톤</td></tr><tr><th scope="row">2025년</th><td>850톤</td></tr></tbody></table><p class="figure-scope">부산 바다 전체에서 생기거나 남아 있는 쓰레기의 양은 아니에요.</p>`);
     else if(a==='common-word'){const w=D.glossary[Number(b.dataset.word)];if(w)showModal(w[0],`<p>${esc(w[1])}</p>`);}
-    else if(a==='filter'){filter=b.dataset.filter;refreshGrid();}
-    else if(a==='clear-search'){filter='전체';search='';document.getElementById('case-search').value='';refreshGrid();}
+    else if(a==='filter'){filter=b.dataset.filter;homePage=0;refreshGrid();}
+    else if(a==='clear-search'){filter='전체';search='';homePage=0;document.getElementById('case-search').value='';refreshGrid();}
     else if(a==='candidate')toggleCandidate(b.dataset.case);
     else if(a==='fact')toggleFact(b.dataset.fact);
     else if(a==='remove-fact'){const id=b.dataset.fact;state.facts=state.facts.filter(f=>f!==id);delete state.notes[id];save();notebook();updateUI();toast('근거를 바구니에서 뺐어요.');}
     else if(a==='confirm-remove'){closeModal();toggleCandidate(b.dataset.case,true);}
-    else if(a==='font'){state.large=!state.large;save();updateUI();toast(state.large?'글씨를 크게 보여 드려요.':'기본 글씨 크기로 돌아왔어요.');}
+    else if(a==='font'){state.large=!state.large;save();render();toast(state.large?'글씨를 크게 보여 드려요.':'기본 글씨 크기로 돌아왔어요.');}
     else if(a==='guide')guide();else if(a==='teacher')teacher();else if(a==='sources')sourcesView();else if(a==='source-one')sourcesView([b.dataset.source],'이 자료의 출처');
     else if(a==='case-sources'){const c=findCase(b.dataset.case);sourcesView([...new Set([...c.facts.map(f=>f.source),...(c.extraSource?[c.extraSource]:[])])],`${c.short} · 자료 출처`);}
     else if(a==='close-modal')closeModal();
@@ -275,13 +373,15 @@
   });
   document.addEventListener('input',e=>{
     const el=e.target;
-    if(el.id==='case-search'){search=el.value;refreshGrid();}
+    if(el.id==='case-search'){search=el.value;homePage=0;refreshGrid();}
     else if(el.dataset.field){const field=el.dataset.field;if(!['name','problem','question','ecoNote','peopleNote','target'].includes(field))return;state[field]=el.value;save();const counter=document.querySelector(`[data-counter="${field}"]`);if(counter)counter.textContent=`${el.value.length}/${el.maxLength}`;}
     else if(el.dataset.note&&factIds.has(el.dataset.note)){state.notes[el.dataset.note]=el.value;save();}
   });
   document.addEventListener('change',e=>{
     const el=e.target;
-    if(el.name==='chosen-case'&&caseIds.has(el.value)){state.selected=el.value;save();document.querySelectorAll('.candidate').forEach(c=>c.classList.toggle('selected',!!c.querySelector('input:checked')));toast('이번에 탐구할 주제로 정했어요.');}
+    if(el.name==='chosen-case'&&(el.value===''||caseIds.has(el.value))){state.selected=el.value;save();document.querySelectorAll('.candidate').forEach(c=>c.classList.toggle('selected',!!c.querySelector('input:checked')));toast(el.value?'이번에 탐구할 주제로 정했어요.':'탐구할 주제를 아직 고르지 않았어요.');}
+    if(el.id==='reading-select')navigate(`#case=${el.dataset.case}&tab=evidence&read=${el.value}&page=0`);
+    if(el.id==='saved-fact-select'&&state.facts.includes(el.value))navigate(`#view=notebook&step=1&fact=${el.value}`);
     if(el.id==='compare-a'||el.id==='compare-b'){
       const side=el.id.endsWith('a')?'a':'b';if(side==='a')compareA=el.value;else compareB=el.value;
       if(compareA===compareB){const other=state.candidates.find(id=>id!==el.value);if(side==='a'){compareB=other;document.getElementById('compare-b').value=other;}else{compareA=other;document.getElementById('compare-a').value=other;}}
@@ -291,6 +391,9 @@
   modal.addEventListener('click',e=>{if(e.target===modal){const r=modal.getBoundingClientRect();if(e.clientX<r.left||e.clientX>r.right||e.clientY<r.top||e.clientY>r.bottom)closeModal();}});
   modal.addEventListener('cancel',()=>{if(lastFocus?.isConnected)setTimeout(()=>lastFocus.focus({preventScroll:true}),0);});
   window.addEventListener('hashchange',()=>{if(modal.open)modal.close();render();window.scrollTo({top:0,behavior:'instant'});main.focus({preventScroll:true});});
+  let resizeTimer;
+  window.addEventListener('resize',()=>{clearTimeout(resizeTimer);resizeTimer=setTimeout(()=>{const r=route();if(r.view==='explore')refreshGrid();else if(r.view==='case'&&r.tab==='evidence')render();},120);});
+  document.addEventListener('keydown',e=>{if(modal.open||e.altKey||e.ctrlKey||e.metaKey||e.target.closest('input,textarea,select,[contenteditable="true"]'))return;if(route().view==='case'&&route().tab==='evidence'&&['ArrowLeft','ArrowRight'].includes(e.key)){e.preventDefault();moveReading(e.key==='ArrowRight'?1:-1);}});
   window.addEventListener('beforeprint',preparePrint);
   document.querySelector('.skip-link').addEventListener('click',event=>{event.preventDefault();main.focus({preventScroll:true});main.scrollIntoView({block:'start'});});
   render();
