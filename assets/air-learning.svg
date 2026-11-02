@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 320" role="img" aria-labelledby="t d">
+<title id="t">도시의 공기를 이해하기 위한 그림</title><desc id="d">도시의 건물과 도로, 항구의 배, 공기 측정기와 나무. 오늘 부산의 공기 상태나 특정 장소의 피해를 나타낸 그림이 아닙니다.</desc>
+<rect width="640" height="320" rx="24" fill="#e4f0ee"/><g fill="#fff" opacity=".8"><path d="M34 65q10-28 34-14 25-16 41 10 31 6 14 25H37Q19 78 34 65Z"/><path d="M339 62q8-24 32-12 27-16 39 10 26 3 19 22h-90q-19-11 0-20Z"/></g>
+<g fill="#9ebcb1"><rect x="18" y="136" width="64" height="105" rx="5"/><rect x="91" y="104" width="61" height="137" rx="5"/><rect x="163" y="150" width="60" height="91" rx="5"/></g><g fill="#dfece3"><path d="M35 158h15v18H35Zm28 0h12v18H63ZM35 191h15v18H35Zm28 0h12v18H63ZM107 127h14v18h-14Zm0 35h14v18h-14Zm29-35h10v18h-10Zm0 35h10v18h-10ZM177 171h13v17h-13Zm25 0h13v17h-13Z"/></g>
+<path d="M0 236h640v47H0Z" fill="#899c8d"/><path d="M0 260h640" stroke="#f5edcf" stroke-width="3" stroke-dasharray="18 15"/><path d="M0 284h640v36H0Z" fill="#76adba"/>
+<g transform="translate(31 205)"><rect width="132" height="45" rx="9" fill="#2d785c"/><path d="M12 6h77v18H12Z" fill="#d1ece2"/><path d="M100 6h22v31h-22Z" fill="#b6d7ce"/><circle cx="27" cy="44" r="11" fill="#425b4e"/><circle cx="105" cy="44" r="11" fill="#425b4e"/></g>
+<path d="M263 294h112l-20 21h-74Z" fill="#477769"/><path d="M286 272h45v23h-45Z" fill="#f0e9cd"/><path d="M334 279h20v16h-20Z" fill="#789f90"/>
+<g stroke="#47785f" stroke-width="6" stroke-linecap="round"><path d="M448 239v-83"/><path d="M555 239v-95"/></g><g fill="#6ba477"><circle cx="448" cy="150" r="37"/><circle cx="555" cy="135" r="45"/></g>
+<g transform="translate(267 125)"><rect width="71" height="90" rx="10" fill="#fff" stroke="#5e8b7d" stroke-width="5"/><rect x="12" y="15" width="47" height="28" rx="4" fill="#cae3d5"/><path d="M14 61h43m-43 10h43m-27 19v21" stroke="#5e8b7d" stroke-width="5"/><circle cx="49" cy="29" r="5" fill="#337b60"/></g>
+<g font-family="sans-serif" font-size="24" fill="#234e3c" font-weight="700"><text x="25" y="35">사람의 생활</text><text x="248" y="105">공기 측정</text><text x="461" y="52">식물의 환경</text></g>
+</svg>

@@ -529,3 +529,20 @@ main:focus{outline:0}
 @media print{body{display:block!important;height:auto!important;overflow:visible!important}}
 
 @media print{@page{size:A4;margin:15mm}body{background:#fff;font-size:11pt}.site-header,main,.site-footer,dialog,.toast,.skip-link{display:none!important}#print-sheet{display:block!important;color:#172e24}#print-sheet h1{font-size:23pt;border-bottom:2px solid #1e6347;padding-bottom:10px;margin-bottom:12px}#print-sheet h2{font-size:15pt;margin:20px 0 8px}#print-sheet p{font-size:11pt;white-space:pre-wrap}#print-sheet section{break-inside:avoid}#print-sheet ol{padding-left:20px}#print-sheet li{margin:13px 0;break-inside:avoid}#print-sheet small{font-size:9pt;color:#555;display:block;overflow-wrap:anywhere}#print-sheet .print-meta{font-size:10pt;color:#666;margin:8px 0 18px}#print-sheet .print-field{padding:12px;border:1px solid #ccd7c7;border-radius:5px;min-height:60px}#print-sheet .print-credit{font-size:8pt;border-top:1px solid #ddd;padding-top:10px;margin-top:20px}}
+
+/* Added pollution topics use the same large-text reading desk. */
+.home-pager{flex-shrink:0}
+.pollution-diagram{display:block;width:100%;height:auto;object-fit:contain}
+.data-number-table caption{font-size:18px;line-height:1.45;padding-bottom:8px}
+.data-number-table th,.data-number-table td{padding:8px 15px}
+@media(max-width:699px){.explore-toolbar{flex-wrap:wrap}.filters{flex-wrap:wrap}.search-field{width:100%}}
+
+/* Keep topic navigation beside filters on landscape tablets. */
+.home-view .home-pager{padding-top:0;gap:8px;font-size:17px;flex-shrink:0}
+.home-view .home-pager .subtle-button{font-size:18px;min-height:44px;padding:6px 10px;gap:6px}
+.home-view .home-pager>span{white-space:nowrap}
+@media(min-width:900px) and (min-height:680px){.home-view .search-field{width:210px;min-width:160px;flex-shrink:1}}
+@media(min-width:700px) and (max-width:899px) and (min-height:680px){.home-view .explore-toolbar{display:grid;grid-template-columns:auto minmax(0,1fr);gap:8px 12px}.home-view .search-field{width:100%;min-width:0}.home-view .home-pager{grid-column:1/-1}}
+@media(max-width:699px){.home-view .home-pager{width:100%}}
+
+.home-view .card-photo img[src$=".svg"]{object-fit:contain}
